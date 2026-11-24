@@ -1,0 +1,191 @@
+{
+  "entities": {
+    "User": {
+      "title": "Pharmacist User Profile",
+      "description": "Authenticated pharmacist profile storing display info for private pharmacy ledger access.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Firebase Auth UID matching document ID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified email address of the pharmacist."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 120,
+          "description": "Display name of the pharmacist."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "Counter": {
+      "title": "Serial Number Counter",
+      "description": "Atomic monotonic serial counter per pharmacist workspace so prescription serial numbers never duplicate or reset.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "UID of the pharmacist workspace owner."
+        },
+        "nextSerialNumber": {
+          "type": "integer",
+          "description": "Next available serial number starting at 1."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": ["ownerId", "nextSerialNumber", "createdAt", "updatedAt"]
+    },
+    "Prescription": {
+      "title": "Pharmacy Prescription Record",
+      "description": "Structured prescription record extracted from a prescription image or entered manually.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "UID of the pharmacist who owns this record."
+        },
+        "serialNo": {
+          "type": "integer",
+          "description": "Immutable sequential serial number starting at 1."
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{2}/\\d{2}/\\d{4}$",
+          "description": "Prescription or record date formatted strictly as DD/MM/YYYY."
+        },
+        "dateIsRecordDate": {
+          "type": "boolean",
+          "description": "True when prescription had no date and today's record date was used."
+        },
+        "prescriberName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 200,
+          "description": "Doctor or prescriber name and credentials."
+        },
+        "patientName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 200,
+          "description": "Patient full name."
+        },
+        "age": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50,
+          "description": "Patient age as specified or Not mentioned."
+        },
+        "sex": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 30,
+          "description": "Patient sex as specified or Not mentioned."
+        },
+        "prescribedMedicine": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4000,
+          "description": "All prescribed medicines with dosage, strength, frequency, and quantity separated by line breaks."
+        },
+        "duration": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000,
+          "description": "Duration of treatment."
+        },
+        "pharmacistSignature": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 200,
+          "description": "Pharmacist typed name or signature."
+        },
+        "signatureDrawing": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 32000,
+          "description": "Optional compact data URL from digital signature pad."
+        },
+        "remarks": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000,
+          "description": "Pharmacy dispensing remarks."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "serialNo",
+        "date",
+        "dateIsRecordDate",
+        "prescriberName",
+        "patientName",
+        "age",
+        "sex",
+        "prescribedMedicine",
+        "duration",
+        "pharmacistSignature",
+        "remarks",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private pharmacist user profile document."
+    },
+    "/users/{userId}/meta/{counterId}": {
+      "schema": { "$ref": "#/entities/Counter" },
+      "description": "Atomic sequential serial counter for the pharmacist's prescriptions."
+    },
+    "/users/{userId}/prescriptions/{prescriptionId}": {
+      "schema": { "$ref": "#/entities/Prescription" },
+      "description": "Private pharmacy prescription records owned by the authenticated pharmacist."
+    }
+  }
+}

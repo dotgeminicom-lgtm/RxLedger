@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default (including collectionGroup queries)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidSignatureDrawing(val) {
+      return val is string
+        && val.size() <= 32000
+        && (
+          val.size() == 0
+          || val.matches('^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$')
+        );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string
+        && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string
+        && data.displayName.size() <= 120
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCounter(data, userId) {
+      return data.keys().hasAll(['ownerId', 'nextSerialNumber', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'nextSerialNumber', 'createdAt', 'updatedAt'])
+        && data.ownerId is string
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && data.ownerId.size() >= 1 && data.ownerId.size() <= 128
+        && data.nextSerialNumber is int
+        && data.nextSerialNumber >= 1
+        && data.nextSerialNumber <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPrescription(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'serialNo', 'date', 'dateIsRecordDate',
+          'prescriberName', 'patientName', 'age', 'sex',
+          'prescribedMedicine', 'duration', 'pharmacistSignature',
+          'remarks', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'serialNo', 'date', 'dateIsRecordDate',
+          'prescriberName', 'patientName', 'age', 'sex',
+          'prescribedMedicine', 'duration', 'pharmacistSignature',
+          'signatureDrawing', 'remarks', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && data.ownerId.size() >= 1 && data.ownerId.size() <= 128
+        && data.serialNo is int
+        && data.serialNo >= 1
+        && data.serialNo <= 10000000
+        && data.date is string
+        && data.date.size() == 10
+        && data.date.matches('^\\d{2}/\\d{2}/\\d{4}$')
+        && data.dateIsRecordDate is bool
+        && data.prescriberName is string && data.prescriberName.size() <= 200
+        && data.patientName is string && data.patientName.size() <= 200
+        && data.age is string && data.age.size() <= 50
+        && data.sex is string && data.sex.size() <= 30
+        && data.prescribedMedicine is string && data.prescribedMedicine.size() <= 4000
+        && data.duration is string && data.duration.size() <= 1000
+        && data.pharmacistSignature is string && data.pharmacistSignature.size() <= 200
+        && (!('signatureDrawing' in data) || isValidSignatureDrawing(data.signatureDrawing))
+        && data.remarks is string && data.remarks.size() <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isValidId(userId)
+        && isOwner(userId)
+        && (resource == null || existing().uid == request.auth.uid);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && resource != null
+        && existing().uid == request.auth.uid
+        && isValidUser(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+      allow delete: if false;
+
+      match /meta/{counterId} {
+        allow get: if isValidId(userId)
+          && isValidId(counterId)
+          && counterId == 'counters'
+          && isOwner(userId)
+          && (resource == null || existing().ownerId == request.auth.uid);
+        allow list: if false;
+        allow create: if isValidId(userId)
+          && isValidId(counterId)
+          && counterId == 'counters'
+          && isOwner(userId)
+          && isValidCounter(incoming(), userId)
+          && incoming().nextSerialNumber == 2
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(counterId)
+          && counterId == 'counters'
+          && isOwner(userId)
+          && resource != null
+          && existing().ownerId == request.auth.uid
+          && isValidCounter(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().nextSerialNumber == existing().nextSerialNumber + 1
+          && incoming().diff(existing()).affectedKeys().hasOnly(['nextSerialNumber', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      match /prescriptions/{prescriptionId} {
+        allow get: if isValidId(userId)
+          && isValidId(prescriptionId)
+          && isOwner(userId)
+          && resource != null
+          && existing().ownerId == request.auth.uid;
+        allow list: if isValidId(userId)
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(prescriptionId)
+          && isOwner(userId)
+          && isValidPrescription(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(userId)/meta/counters).data.ownerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/users/$(userId)/meta/counters).data.nextSerialNumber == incoming().serialNo + 1;
+        allow update: if isValidId(userId)
+          && isValidId(prescriptionId)
+          && isOwner(userId)
+          && resource != null
+          && existing().ownerId == request.auth.uid
+          && isValidPrescription(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().serialNo == existing().serialNo
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            // Action: Edit prescription fields, pharmacist signature, or remarks
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'date', 'dateIsRecordDate', 'prescriberName', 'patientName',
+              'age', 'sex', 'prescribedMedicine', 'duration',
+              'pharmacistSignature', 'signatureDrawing', 'remarks', 'updatedAt'
+            ])
+          );
+        allow delete: if isValidId(userId)
+          && isValidId(prescriptionId)
+          && isOwner(userId)
+          && resource != null
+          && existing().ownerId == request.auth.uid;
+      }
+    }
+  }
+}

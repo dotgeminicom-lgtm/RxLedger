@@ -1,0 +1,10 @@
+{
+  "name": "Remix RxLedger — AI Prescription Scanner \u0026 Pharmacy Record System",
+  "description": "Mobile-first AI prescription OCR scanner, Excel-style pharmacy ledger, and instant WhatsApp record sharing system.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
